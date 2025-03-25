@@ -17,6 +17,7 @@ import (
 const newRelicGraphQLEndpoint = "https://api.eu.newrelic.com/graphql"
 
 
+// request
 type InsertKeyRequest struct {
 	AccountID  int    `json:"account_id"`
 	Name       string `json:"name"`
@@ -24,7 +25,7 @@ type InsertKeyRequest struct {
 	IngestType string `json:"ingestType"` 
 }
 
-
+// response
 type NewRelicResponse struct {
 	APIAccessCreateKeys struct {
 		CreatedKeys []struct {
@@ -49,7 +50,7 @@ type NewRelicResponse struct {
 func createApiKey(w http.ResponseWriter, r *http.Request) {
 	log.Println("Received request to create a new key")
 
-	_ = godotenv.Load()
+	
 	apiKey := os.Getenv("NEW_RELIC_API_KEY")
 
 	if apiKey == "" {
@@ -106,43 +107,53 @@ func createApiKey(w http.ResponseWriter, r *http.Request) {
 	req := graphql.NewRequest(mutation)
 
 	// Set headers
-	req.Header.Set("API-Key", apiKey)
+	req.Header.Set("API-Key",apiKey )
 	req.Header.Set("Content-Type", "application/json")
 
 	// Execute GraphQL request
 	ctx := context.Background()
-	var respData NewRelicResponse
-	if err := client.Run(ctx, req, &respData); err != nil {
+	var responseData NewRelicResponse
+	if err := client.Run(ctx, req, &responseData); err != nil {
 		http.Error(w, `{"error": "Failed to create insert key", "details": "`+err.Error()+`"}`, http.StatusInternalServerError)
 		log.Println(err)
 		return
 	}
 
-	// Check for errors in response
-	if len(respData.APIAccessCreateKeys.Errors) > 0 {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]any{
-			"error":  "API returned an error",
-			"details": respData.APIAccessCreateKeys.Errors,
-		})
-
-		return
-	}
-
 	// Return the created key
-	if len(respData.APIAccessCreateKeys.CreatedKeys) > 0 {
+	if len(responseData.APIAccessCreateKeys.CreatedKeys) > 0 {
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]any{
-			"insert_key": respData.APIAccessCreateKeys.CreatedKeys[0],
+			"insert_key": responseData.APIAccessCreateKeys.CreatedKeys[0],
 			
 		})
 	} else {
 		http.Error(w, `{"error": "No key was created"}`, http.StatusInternalServerError)
 		return
 	}
+
+		// Check for errors in response
+		if len(responseData.APIAccessCreateKeys.Errors) > 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]any{
+				"error":  "API returned an error",
+				"details": responseData.APIAccessCreateKeys.Errors,
+			})
+	
+			return
+		}	
 }
 
 func main() {
+	err := godotenv.Load()
+	
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	  }
+	//   client := graphql.NewClient(newRelicGraphQLEndpoint)
+	//   if err != nil {
+	// 	println("there is an error", client)
+	//   }
+  
 	r := mux.NewRouter()
 	r.HandleFunc("/create-insert-key", createApiKey).Methods("POST")
 
