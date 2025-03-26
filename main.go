@@ -74,24 +74,19 @@ type DeleteKeysRequest struct {
 
 type Server struct {
 	client *graphql.Client
+	apiKey string
 }
 
 //  Create an API key
-
 func (s *Server) createApiKey(w http.ResponseWriter, r *http.Request) {
 	log.Println("Received request to create a new key")
-
-	apiKey := os.Getenv("NEW_RELIC_API_KEY")
-	if apiKey == "" {
-		log.Printf("Missing NEW_RELIC_API_KEY. Status Code: %d", http.StatusUnauthorized)
-		return
-	}
 
 	var request InsertKeyRequest
 
 	err := json.NewDecoder(r.Body).Decode(&request)
 	if err != nil {
 		log.Printf(`{"error": "Invalid JSON request body"}, Status Code: %d`, http.StatusBadRequest)
+		http.Error(w, "Invalid JSON request body", http.StatusBadRequest)
 		return
 	}
 
@@ -132,7 +127,7 @@ func (s *Server) createApiKey(w http.ResponseWriter, r *http.Request) {
 
 	req := graphql.NewRequest(mutation)
 
-	req.Header.Set("API-Key", apiKey)
+	req.Header.Set("API-Key", s.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	ctx := context.Background()
@@ -141,6 +136,7 @@ func (s *Server) createApiKey(w http.ResponseWriter, r *http.Request) {
 	err = s.client.Run(ctx, req, &responseData)
 	if err != nil {
 		log.Printf("Failed to create insert key: %v, Status Code: %d", err, http.StatusInternalServerError)
+		http.Error(w, "Failed to create insert key", http.StatusInternalServerError)
 		return
 	}
 
@@ -224,17 +220,11 @@ func (s *Server) deleteApiKey(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func GetClient() (*graphql.Client, error) {
+func GetClient() *graphql.Client {
 	newRelicGraphQLEndpoint := "https://api.eu.newrelic.com/graphql"
-	if newRelicGraphQLEndpoint == "" {
-		log.Println("GraphQL endpoint is not configured")
-		return nil, fmt.Errorf("GraphQL endpoint is not configured")
-	}
-
 	client := graphql.NewClient(newRelicGraphQLEndpoint)
-
 	log.Println("Successfully connected to NerdGraph client")
-	return client, nil
+	return client
 }
 
 func main() {
@@ -243,12 +233,20 @@ func main() {
 		log.Fatal("Error loading .env file")
 	}
 
+	apiKey := os.Getenv("NEW_RELIC_API_KEY")
+	if apiKey == "" {
+		log.Fatalf("Missing NEW_RELIC_API_KEY.")
+	}
+
 	client, err := GetClient()
 	if err != nil {
 		log.Fatalf("Failed to initialize GraphQL client: %v", err)
 	}
 
-	server := &Server{client: client}
+	server := &Server{
+		client: client,
+		apiKey: apiKey,
+	}
 
 	r := mux.NewRouter()
 	r.HandleFunc("/create-insert-key", server.createApiKey).Methods("POST")
