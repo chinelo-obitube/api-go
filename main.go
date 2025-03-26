@@ -76,6 +76,8 @@ type Server struct {
 	client *graphql.Client
 }
 
+//  Create an API key
+
 func (s *Server) createApiKey(w http.ResponseWriter, r *http.Request) {
 	log.Println("Received request to create a new key")
 
@@ -136,15 +138,12 @@ func (s *Server) createApiKey(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
 	var responseData NewRelicResponse
 
-	// Executing the GraphQL request
 	err = s.client.Run(ctx, req, &responseData)
 	if err != nil {
 		log.Printf("Failed to create insert key: %v, Status Code: %d", err, http.StatusInternalServerError)
-		http.Error(w, fmt.Sprintf(`{"error": "Failed to create insert key", "details": "%s"}`, err.Error()), http.StatusInternalServerError)
 		return
 	}
 
-	// Check if any keys were created
 	if len(responseData.APIAccessCreateKeys.CreatedKeys) > 0 {
 		createdKey := responseData.APIAccessCreateKeys.CreatedKeys[0]
 		log.Printf("Successfully created key: ID=%s, Name=%s", createdKey.ID, createdKey.Name)
@@ -155,18 +154,16 @@ func (s *Server) createApiKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Handle API errors if no keys were created
 	if len(responseData.APIAccessCreateKeys.Errors) > 0 {
-		// log.Printf("API returned errors: %v", responseData.APIAccessCreateKeys.Errors)
 		http.Error(w, fmt.Sprintf("API returned an error: %v", responseData.APIAccessCreateKeys.Errors), http.StatusBadRequest)
 		return
 	}
 
-	// If no keys and no errors, return a generic error
 	log.Println("No keys were created and no errors were returned by the API")
 	http.Error(w, "No key was created", http.StatusInternalServerError)
 }
 
+// Delete an API key
 func (s *Server) deleteApiKey(w http.ResponseWriter, r *http.Request) {
 	log.Println("Received request to delete a key")
 
@@ -180,7 +177,6 @@ func (s *Server) deleteApiKey(w http.ResponseWriter, r *http.Request) {
 	err := json.NewDecoder(r.Body).Decode(&request)
 	if err != nil || request.ID == "" {
 		log.Printf("Invalid request: missing or invalid key ID. Status Code: %d", http.StatusBadRequest)
-		// http.Error(w, `{"error": "Invalid JSON request body or missing key ID"}`, http.StatusBadRequest)
 		return
 	}
 
@@ -212,7 +208,6 @@ func (s *Server) deleteApiKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check for GraphQL errors
 	if len(responseData.ApiAccessDeleteKeys.Errors) > 0 {
 		errorMessages := []string{}
 		for _, e := range responseData.ApiAccessDeleteKeys.Errors {
@@ -222,7 +217,7 @@ func (s *Server) deleteApiKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Successful deletion
+
 	log.Printf("Successfully deleted key: Status Code=%d", http.StatusOK)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]any{
