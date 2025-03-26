@@ -13,7 +13,7 @@ import (
 	"github.com/machinebox/graphql"
 )
 
-const newRelicGraphQLEndpoint = "https://api.eu.newrelic.com/graphql"
+// const newRelicGraphQLEndpoint = "https://api.eu.newrelic.com/graphql"
 
 // request
 type InsertKeyRequest struct {
@@ -217,12 +217,24 @@ func (s *Server) deleteApiKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-
 	log.Printf("Successfully deleted key: Status Code=%d", http.StatusOK)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]any{
 		"deleted_key": request.ID,
 	})
+}
+
+func GetClient() (*graphql.Client, error) {
+	newRelicGraphQLEndpoint := "https://api.eu.newrelic.com/graphql"
+	if newRelicGraphQLEndpoint == "" {
+		log.Println("GraphQL endpoint is not configured")
+		return nil, fmt.Errorf("GraphQL endpoint is not configured")
+	}
+
+	client := graphql.NewClient(newRelicGraphQLEndpoint)
+
+	log.Println("Successfully connected to NerdGraph client")
+	return client, nil
 }
 
 func main() {
@@ -231,7 +243,11 @@ func main() {
 		log.Fatal("Error loading .env file")
 	}
 
-	client := graphql.NewClient(newRelicGraphQLEndpoint)
+	client, err := GetClient()
+	if err != nil {
+		log.Fatalf("Failed to initialize GraphQL client: %v", err)
+	}
+
 	server := &Server{client: client}
 
 	r := mux.NewRouter()
