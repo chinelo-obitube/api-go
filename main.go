@@ -44,6 +44,34 @@ type NewRelicResponse struct {
 	} `json:"apiAccessCreateKeys"`
 }
 
+type DeleteKeyRequest struct {
+	ID string `json:"id"`
+}
+
+type DeleteKeysResponse struct {
+	ApiAccessDeleteKeys struct {
+		DeletedKeys []struct {
+			ID string `json:"id"`
+		} `json:"deletedKeys"`
+		Errors []struct {
+			Message                 string `json:"message"`
+			Type                    string `json:"type"`
+			ApiAccessIngestKeyError struct {
+				ID        string `json:"id"`
+				Message   string `json:"message"`
+				ErrorType string `json:"errorType"`
+				AccountID string `json:"accountId"`
+			} `json:"apiAccessIngestKeyError,omitempty"`
+		} `json:"errors"`
+	} `json:"apiAccessDeleteKeys"`
+}
+
+type DeleteKeysRequest struct {
+	Keys struct {
+		IngestKeyIDs string `json:"ingestKeyIds"`
+	} `json:"keys"`
+}
+
 type Server struct {
 	client *graphql.Client
 }
@@ -53,15 +81,15 @@ func (s *Server) createApiKey(w http.ResponseWriter, r *http.Request) {
 
 	apiKey := os.Getenv("NEW_RELIC_API_KEY")
 	if apiKey == "" {
-		http.Error(w, `{"error": "Missing NEW_RELIC_API_KEY"}`, http.StatusUnauthorized)
+		log.Printf("Missing NEW_RELIC_API_KEY. Status Code: %d", http.StatusUnauthorized)
 		return
 	}
 
-	// Parse request body
 	var request InsertKeyRequest
+
 	err := json.NewDecoder(r.Body).Decode(&request)
 	if err != nil {
-		http.Error(w, `{"error": "Invalid JSON request body"}`, http.StatusBadRequest)
+		log.Printf(`{"error": "Invalid JSON request body"}, Status Code: %d`, http.StatusBadRequest)
 		return
 	}
 
@@ -111,7 +139,7 @@ func (s *Server) createApiKey(w http.ResponseWriter, r *http.Request) {
 	// Executing the GraphQL request
 	err = s.client.Run(ctx, req, &responseData)
 	if err != nil {
-		log.Printf("Error executing GraphQL request: %v", err)
+		log.Printf("Failed to create insert key: %v, Status Code: %d", err, http.StatusInternalServerError)
 		http.Error(w, fmt.Sprintf(`{"error": "Failed to create insert key", "details": "%s"}`, err.Error()), http.StatusInternalServerError)
 		return
 	}
@@ -139,6 +167,69 @@ func (s *Server) createApiKey(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "No key was created", http.StatusInternalServerError)
 }
 
+func (s *Server) deleteApiKey(w http.ResponseWriter, r *http.Request) {
+	log.Println("Received request to delete a key")
+
+	apiKey := os.Getenv("NEW_RELIC_API_KEY")
+	if apiKey == "" {
+		http.Error(w, `{"error": "Missing NEW_RELIC_API_KEY"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var request DeleteKeyRequest
+	err := json.NewDecoder(r.Body).Decode(&request)
+	if err != nil || request.ID == "" {
+		log.Printf("Invalid request: missing or invalid key ID. Status Code: %d", http.StatusBadRequest)
+		// http.Error(w, `{"error": "Invalid JSON request body or missing key ID"}`, http.StatusBadRequest)
+		return
+	}
+
+	mutation := fmt.Sprintf(`
+	mutation {
+		apiAccessDeleteKeys(keys: { ingestKeyIds: ["%q"] }) {
+			deletedKeys {
+				id
+			}
+			errors {
+				message
+			}
+		}
+	}`, request.ID)
+
+	req := graphql.NewRequest(mutation)
+
+	req.Header.Set("API-Key", apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	var responseData DeleteKeysResponse
+
+	ctx := context.Background()
+
+	err = s.client.Run(ctx, req, &responseData)
+	if err != nil {
+		log.Printf("Error executing GraphQL request: %v", err)
+		http.Error(w, fmt.Sprintf(`{"error": "Failed to delete key", "details": "%s"}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	// Check for GraphQL errors
+	if len(responseData.ApiAccessDeleteKeys.Errors) > 0 {
+		errorMessages := []string{}
+		for _, e := range responseData.ApiAccessDeleteKeys.Errors {
+			errorMessages = append(errorMessages, e.Message)
+		}
+		log.Printf("Failed to delete key: %v, Status Code: %d", errorMessages, http.StatusInternalServerError)
+		return
+	}
+
+	// Successful deletion
+	log.Printf("Successfully deleted key: Status Code=%d", http.StatusOK)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]any{
+		"deleted_key": request.ID,
+	})
+}
+
 func main() {
 	err := godotenv.Load()
 	if err != nil {
@@ -150,6 +241,7 @@ func main() {
 
 	r := mux.NewRouter()
 	r.HandleFunc("/create-insert-key", server.createApiKey).Methods("POST")
+	r.HandleFunc("/delete-key", server.deleteApiKey).Methods("DELETE")
 
 	port := ":8080"
 	fmt.Println("Server is running on port", port)
