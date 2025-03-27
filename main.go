@@ -77,7 +77,7 @@ type Server struct {
 	apiKey string
 }
 
-//  Create an API key
+// Create an API key
 func (s *Server) createApiKey(w http.ResponseWriter, r *http.Request) {
 	log.Println("Received request to create a new key")
 
@@ -220,11 +220,11 @@ func (s *Server) deleteApiKey(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func GetClient() *graphql.Client {
+func GetClient() (*graphql.Client, error) {
 	newRelicGraphQLEndpoint := "https://api.eu.newrelic.com/graphql"
 	client := graphql.NewClient(newRelicGraphQLEndpoint)
 	log.Println("Successfully connected to NerdGraph client")
-	return client
+	return client, nil
 }
 
 func main() {
