@@ -173,6 +173,7 @@ func (s *Server) deleteApiKey(w http.ResponseWriter, r *http.Request) {
 	err := json.NewDecoder(r.Body).Decode(&request)
 	if err != nil || request.ID == "" {
 		log.Printf("Invalid request: missing or invalid key ID. Status Code: %d", http.StatusBadRequest)
+		http.Error(w, "Invalid request: missing or invalid key ID", http.StatusBadRequest)
 		return
 	}
 
