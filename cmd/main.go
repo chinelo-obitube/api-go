@@ -179,7 +179,7 @@ func (s *Server) deleteApiKey(w http.ResponseWriter, r *http.Request) {
 
 	mutation := fmt.Sprintf(`
 	mutation {
-		apiAccessDeleteKeys(keys: { ingestKeyIds: ["%q"] }) {
+		apiAccessDeleteKeys(keys: { ingestKeyIds: ["%s"] }) {
 			deletedKeys {
 				id
 			}
@@ -210,6 +210,7 @@ func (s *Server) deleteApiKey(w http.ResponseWriter, r *http.Request) {
 		for _, e := range responseData.ApiAccessDeleteKeys.Errors {
 			errorMessages = append(errorMessages, e.Message)
 		}
+		http.Error(w, fmt.Sprintf(`{"error": "Failed to delete key", "details": "%s"}`, errorMessages), http.StatusInternalServerError)
 		log.Printf("Failed to delete key: %v, Status Code: %d", errorMessages, http.StatusInternalServerError)
 		return
 	}
@@ -250,8 +251,8 @@ func main() {
 	}
 
 	r := mux.NewRouter()
-	r.HandleFunc("/create-insert-key", server.createApiKey).Methods("POST")
-	r.HandleFunc("/delete-key", server.deleteApiKey).Methods("DELETE")
+	r.HandleFunc("/createKey", server.createApiKey).Methods("POST")
+	r.HandleFunc("/deleteKey", server.deleteApiKey).Methods("DELETE")
 
 	port := ":8080"
 	fmt.Println("Server is running on port", port)

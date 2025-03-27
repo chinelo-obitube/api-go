@@ -1,0 +1,13 @@
+curl -X POST "http://localhost:8080/createKey" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "account_id": ",
+       "name": "test1 Key",
+       "notes": "A note.",
+       "ingestType": "BROWSER"
+     }'
+
+curl -X DELETE "http://localhost:8080/deleteKey" \
+     -H "Content-Type: application/json" \
+     -d '{"id": ""}'
+
